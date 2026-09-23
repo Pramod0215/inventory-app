@@ -1,0 +1,15 @@
+{
+  "name": "inventory-app-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "concurrently \"npm --prefix backend run dev\" \"npm --prefix clientapp run dev\"",
+    "build": "npm --prefix clientapp run build",
+    "start": "npm run dev",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
