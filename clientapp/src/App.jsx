@@ -11,6 +11,10 @@ const initialFormState = {
 };
 
 function App() {
+  const [screen, setScreen] = useState(() => {
+    const savedToken = typeof window !== 'undefined' ? localStorage.getItem('inventory-token') : '';
+    return savedToken ? 'home' : 'login';
+  });
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState(initialFormState);
   const [loading, setLoading] = useState(false);
@@ -60,14 +64,148 @@ function App() {
       localStorage.setItem('inventory-token', data.data?.token || '');
       localStorage.setItem('inventory-user', JSON.stringify(data.data?.user || {}));
 
-      setMessage({ type: 'success', text: isLogin ? 'Welcome back! Login successful.' : 'Account created successfully.' });
       setFormData(initialFormState);
+      setMessage({ type: 'success', text: isLogin ? 'Welcome back! Login successful.' : 'Account created successfully.' });
+      setScreen('home');
     } catch (error) {
       setMessage({ type: 'error', text: error.message || 'Something went wrong.' });
     } finally {
       setLoading(false);
     }
   };
+
+  const handleLogout = () => {
+    localStorage.removeItem('inventory-token');
+    localStorage.removeItem('inventory-user');
+    setScreen('login');
+    setIsLogin(true);
+    setFormData(initialFormState);
+    setMessage({ type: '', text: '' });
+  };
+
+  if (screen === 'home') {
+    return (
+      <div className="dashboard-page">
+        <div className="page-shell">
+          <header className="page-header">
+            <div>
+              <p className="eyebrow">Dashboard</p>
+              <h1>Choose a category</h1>
+            </div>
+            <button type="button" className="ghost-button" onClick={handleLogout}>
+              Logout
+            </button>
+          </header>
+
+          <div className="category-grid">
+            <button type="button" className="category-card construction" onClick={() => setScreen('tmt')}>
+              <span className="category-tag">Construction</span>
+              <h2>TMT</h2>
+              <p>Steel and construction materials for structural work.</p>
+              <span className="card-link">Open TMT page</span>
+            </button>
+
+            <button type="button" className="category-card hardware" onClick={() => setScreen('pipe')}>
+              <span className="category-tag">Hardware</span>
+              <h2>Pipe</h2>
+              <p>Water, plumbing, and industrial pipe management essentials.</p>
+              <span className="card-link">Open Pipe page</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (screen === 'tmt') {
+    return (
+      <div className="section-page">
+        <div className="page-shell section-shell">
+          <header className="page-header">
+            <div>
+              <p className="eyebrow">Construction</p>
+              <h1>TMT Page</h1>
+            </div>
+            <div className="page-actions">
+              <button type="button" className="secondary-button" onClick={() => setScreen('home')}>
+                Back to home
+              </button>
+              <button type="button" className="ghost-button" onClick={handleLogout}>
+                Logout
+              </button>
+            </div>
+          </header>
+
+          <div className="content-panel">
+            <h2>Thermo Mechanically Treated Steel</h2>
+            <p>
+              This section is dedicated to construction-grade TMT materials, including stock tracking,
+              quality checks, and procurement updates.
+            </p>
+            <div className="stats-row">
+              <div className="stat-box">
+                <strong>1,280</strong>
+                <span>Units in stock</span>
+              </div>
+              <div className="stat-box">
+                <strong>92%</strong>
+                <span>Utilization</span>
+              </div>
+              <div className="stat-box">
+                <strong>24</strong>
+                <span>Orders pending</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (screen === 'pipe') {
+    return (
+      <div className="section-page">
+        <div className="page-shell section-shell">
+          <header className="page-header">
+            <div>
+              <p className="eyebrow">Hardware</p>
+              <h1>Pipe Page</h1>
+            </div>
+            <div className="page-actions">
+              <button type="button" className="secondary-button" onClick={() => setScreen('home')}>
+                Back to home
+              </button>
+              <button type="button" className="ghost-button" onClick={handleLogout}>
+                Logout
+              </button>
+            </div>
+          </header>
+
+          <div className="content-panel">
+            <h2>Pipe Inventory</h2>
+            <p>
+              This section manages hardware pipe inventory, sizes, supply chain records, and delivery
+              checkpoints for the warehouse team.
+            </p>
+            <div className="stats-row">
+              <div className="stat-box">
+                <strong>940</strong>
+                <span>Pipe units</span>
+              </div>
+              <div className="stat-box">
+                <strong>18</strong>
+                <span>Categories</span>
+              </div>
+              <div className="stat-box">
+                <strong>7</strong>
+                <span>Dispatches today</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="auth-page">

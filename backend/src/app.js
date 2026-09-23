@@ -3,6 +3,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 
 import authRoutes from './routes/auth.routes.js';
+import inventoryRoutes from './routes/inventory.routes.js';
 import { errorHandler } from './middleware/error.middleware.js';
 
 const app = express();
@@ -27,6 +28,7 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/inventory', inventoryRoutes);
 
 app.use((req, res) => {
   res.status(404).json({
