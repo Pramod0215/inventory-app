@@ -10,6 +10,7 @@ const generateToken = (user) => {
       id: user._id,
       email: user.email,
       name: user.name,
+      role: user.role,
     },
     process.env.JWT_SECRET || 'inventory_secret_key_2026',
     {
@@ -19,11 +20,13 @@ const generateToken = (user) => {
 };
 
 const registerUser = asyncHandler(async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, role } = req.body;
 
   if (!name || !email || !password) {
     throw new ApiError(400, 'Name, email and password are required');
   }
+
+  const normalizedRole = role === 'admin' ? 'admin' : 'user';
 
   const existingUser = await User.findOne({ email: email.toLowerCase() });
 
@@ -35,6 +38,7 @@ const registerUser = asyncHandler(async (req, res) => {
     name,
     email: email.toLowerCase(),
     password,
+    role: normalizedRole,
   });
 
   const token = generateToken(user);
@@ -47,6 +51,7 @@ const registerUser = asyncHandler(async (req, res) => {
           id: user._id,
           name: user.name,
           email: user.email,
+          role: user.role,
         },
         token,
       },
@@ -84,6 +89,7 @@ const loginUser = asyncHandler(async (req, res) => {
           id: user._id,
           name: user.name,
           email: user.email,
+          role: user.role,
         },
         token,
       },
