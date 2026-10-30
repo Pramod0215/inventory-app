@@ -14,4 +14,44 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   },
+  products: {
+    list: () => fetch(`${API_URL}/products`),
+    create: (payload) => fetch(`${API_URL}/products`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('inventory-token') || ''}`,
+      },
+      body: JSON.stringify(payload),
+    }),
+    update: (id, payload) => fetch(`${API_URL}/products/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('inventory-token') || ''}`,
+      },
+      body: JSON.stringify(payload),
+    }),
+    remove: (id) => fetch(`${API_URL}/products/${id}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('inventory-token') || ''}`,
+      },
+    }),
+  },
+  orders: {
+    create: (payload) => fetch(`${API_URL}/orders`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('inventory-token') || ''}`,
+      },
+      body: JSON.stringify(payload),
+    }),
+    list: () => fetch(`${API_URL}/orders`, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('inventory-token') || ''}`,
+      },
+    }),
+  },
 };

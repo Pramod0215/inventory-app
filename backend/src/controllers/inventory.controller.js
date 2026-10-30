@@ -2,13 +2,12 @@ import InventoryItem from '../models/InventoryItem.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { validateInventoryInput, validateObjectId } from '../utils/validation.js';
 
 const createInventoryItem = asyncHandler(async (req, res) => {
-  const { name, sku, category, quantity, price, description, supplier } = req.body;
-
-  if (!name || !sku || !category || quantity === undefined || price === undefined) {
-    throw new ApiError(400, 'Name, SKU, category, quantity and price are required');
-  }
+  const { value, errors } = validateInventoryInput(req.body);
+  if (errors.length) throw new ApiError(400, 'Please correct the inventory item details', errors);
+  const { name, sku, category, quantity, price, description, supplier } = value;
 
   const existingItem = await InventoryItem.findOne({ sku: sku.trim().toUpperCase() });
 
@@ -17,13 +16,13 @@ const createInventoryItem = asyncHandler(async (req, res) => {
   }
 
   const item = await InventoryItem.create({
-    name: name.trim(),
-    sku: sku.trim().toUpperCase(),
-    category: category.trim(),
-    quantity: Number(quantity),
-    price: Number(price),
-    description: description?.trim() || '',
-    supplier: supplier?.trim() || '',
+    name,
+    sku,
+    category,
+    quantity,
+    price,
+    description,
+    supplier,
   });
 
   return res.status(201).json(new ApiResponse(201, item, 'Inventory item created successfully'));
@@ -36,6 +35,7 @@ const getInventoryItems = asyncHandler(async (req, res) => {
 
 const getInventoryItemById = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  if (!validateObjectId(id)) throw new ApiError(400, 'Inventory item ID is invalid');
   const item = await InventoryItem.findById(id);
 
   if (!item) {
@@ -47,7 +47,12 @@ const getInventoryItemById = asyncHandler(async (req, res) => {
 
 const updateInventoryItem = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const updates = req.body;
+  if (!validateObjectId(id)) throw new ApiError(400, 'Inventory item ID is invalid');
+  const { value: updates, errors } = validateInventoryInput(req.body, { partial: true });
+  if (errors.length) throw new ApiError(400, 'Please correct the inventory item details', errors);
+  if (Object.keys(updates).length === 0) {
+    throw new ApiError(400, 'At least one valid inventory item field is required');
+  }
 
   const item = await InventoryItem.findByIdAndUpdate(id, updates, {
     new: true,
@@ -63,6 +68,7 @@ const updateInventoryItem = asyncHandler(async (req, res) => {
 
 const deleteInventoryItem = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  if (!validateObjectId(id)) throw new ApiError(400, 'Inventory item ID is invalid');
   const item = await InventoryItem.findByIdAndDelete(id);
 
   if (!item) {

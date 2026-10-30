@@ -7,6 +7,8 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Name is required'],
       trim: true,
+      minlength: [2, 'Name must contain at least 2 characters'],
+      maxlength: [80, 'Name must not exceed 80 characters'],
     },
     email: {
       type: String,
@@ -14,12 +16,18 @@ const userSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
+      maxlength: [254, 'Email must not exceed 254 characters'],
       match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Please provide a valid email address'],
     },
     password: {
       type: String,
       required: [true, 'Password is required'],
-      minlength: [6, 'Password must contain at least 6 characters'],
+      minlength: [8, 'Password must contain at least 8 characters'],
+      maxlength: [72, 'Password must not exceed 72 characters'],
+      validate: {
+        validator: (password) => Buffer.byteLength(password, 'utf8') <= 72,
+        message: 'Password must not exceed 72 UTF-8 bytes',
+      },
     },
     role: {
       type: String,

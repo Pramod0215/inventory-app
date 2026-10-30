@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AuthForm } from '../components/AuthForm';
 import { DashboardPage } from '../pages/DashboardPage';
 import { inventoryData } from '../data/inventoryData';
 import { api } from '../services/api';
+import { validateAuthForm, validateProductForm } from '../utils/validateForm';
 import '../styles/app.css';
 
 const initialFormState = {
@@ -10,20 +11,6 @@ const initialFormState = {
   email: '',
   password: '',
   confirmPassword: '',
-  role: 'user',
-};
-
-const productSeed = {
-  construction: [
-    { id: 1, name: 'TMT Steel Rod 12mm', brand: 'SteelMax', quantity: 48, price: 190, rating: 4.8, image: 'https://images.unsplash.com/photo-1581092921461-eab62e97a4f1?auto=format&fit=crop&w=900&q=80' },
-    { id: 2, name: 'TMT Bar 16mm', brand: 'BuildStrong', quantity: 32, price: 260, rating: 4.7, image: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=900&q=80' },
-    { id: 3, name: 'Construction Beam Set', brand: 'IronCore', quantity: 18, price: 440, rating: 4.9, image: 'https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=900&q=80' },
-  ],
-  hardware: [
-    { id: 4, name: 'PVC Pipe 2 inch', brand: 'FlowPro', quantity: 60, price: 120, rating: 4.6, image: 'https://images.unsplash.com/photo-1581092335399-7f0dfb056f9c?auto=format&fit=crop&w=900&q=80' },
-    { id: 5, name: 'GI Pipe 1 inch', brand: 'PipeElite', quantity: 22, price: 210, rating: 4.7, image: 'https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=900&q=80' },
-    { id: 6, name: 'Pipe Fittings Kit', brand: 'ReadyFlow', quantity: 14, price: 320, rating: 4.8, image: 'https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=900&q=80' },
-  ],
 };
 
 function App() {
@@ -51,7 +38,7 @@ function App() {
       return null;
     }
   });
-  const [products, setProducts] = useState(productSeed);
+  const [products, setProducts] = useState({ construction: [], hardware: [] });
   const [cart, setCart] = useState([]);
   const [paymentMethod, setPaymentMethod] = useState('UPI');
   const [invoice, setInvoice] = useState(null);
@@ -62,8 +49,34 @@ function App() {
     price: '',
     rating: '4.5',
     image: '',
+    description: '',
   });
   const [editingProductId, setEditingProductId] = useState(null);
+
+  useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        const response = await api.products.list();
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || 'Unable to load products');
+
+        const groupedProducts = { construction: [], hardware: [] };
+        result.data.forEach((product) => {
+          if (groupedProducts[product.category]) {
+            groupedProducts[product.category].push({
+              ...product,
+              id: product._id || product.id,
+            });
+          }
+        });
+        setProducts(groupedProducts);
+      } catch (error) {
+        setMessage({ type: 'error', text: error.message || 'Unable to load products.' });
+      }
+    };
+
+    loadProducts();
+  }, []);
 
   const isAdmin = currentUser?.role === 'admin';
   const cartTotal = useMemo(
@@ -105,14 +118,14 @@ function App() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    setLoading(true);
-    setMessage({ type: '', text: '' });
-
-    if (!isLogin && formData.password !== formData.confirmPassword) {
-      setMessage({ type: 'error', text: 'Passwords do not match.' });
-      setLoading(false);
+    const validationErrors = validateAuthForm(formData, isLogin);
+    if (validationErrors.length) {
+      setMessage({ type: 'error', text: validationErrors.join(' ') });
       return;
     }
+
+    setLoading(true);
+    setMessage({ type: '', text: '' });
 
     const endpoint = isLogin ? api.auth.login : api.auth.signup;
     const payload = isLogin
@@ -121,7 +134,6 @@ function App() {
           name: formData.name,
           email: formData.email,
           password: formData.password,
-          role: formData.role,
         };
 
     try {
@@ -153,6 +165,10 @@ function App() {
       setMessage({ type: 'error', text: 'Admin users manage stock rather than place orders.' });
       return;
     }
+    if (!Number.isSafeInteger(product.quantity) || product.quantity < 1) {
+      setMessage({ type: 'error', text: 'This product is out of stock.' });
+      return;
+    }
 
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id && item.category === selectedCategory);
@@ -178,23 +194,32 @@ function App() {
   };
 
   const updateCartItem = (id, delta) => {
-    setCart((prev) =>
-      prev
+    setCart((prev) => {
+      const currentItem = prev.find((item) => item.id === id);
+      if (!currentItem) return prev;
+
+      const nextQuantity = currentItem.quantity + delta;
+      const stock = products[currentItem.category].find((product) => product.id === id)?.quantity || 0;
+      if (nextQuantity > stock) {
+        setMessage({ type: 'error', text: 'Requested quantity exceeds current stock.' });
+        return prev;
+      }
+
+      return prev
         .map((item) => {
           if (item.id !== id) return item;
-          const nextQty = item.quantity + delta;
-          if (nextQty <= 0) return null;
-          return { ...item, quantity: nextQty };
+          if (nextQuantity <= 0) return null;
+          return { ...item, quantity: nextQuantity };
         })
-        .filter(Boolean)
-    );
+        .filter(Boolean);
+    });
   };
 
   const removeCartItem = (id) => {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (!cart.length) {
       setMessage({ type: 'error', text: 'Your cart is empty.' });
       return;
@@ -211,65 +236,97 @@ function App() {
       return;
     }
 
-    setProducts((prev) => {
-      const updated = { ...prev };
-      Object.keys(updated).forEach((categoryKey) => {
-        updated[categoryKey] = updated[categoryKey].map((product) => {
-          const cartItem = cart.find((item) => item.category === categoryKey && item.id === product.id);
-          if (!cartItem) return product;
-          return { ...product, quantity: Number(product.quantity) - Number(cartItem.quantity) };
-        });
+    setLoading(true);
+    try {
+      const response = await api.orders.create({
+        paymentMethod,
+        items: cart.map((item) => ({ productId: item.id, quantity: item.quantity })),
       });
-      return updated;
-    });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || 'Unable to place order');
 
-    setInvoice({
-      invoiceNumber: `INV-${Date.now()}`,
-      customerName: currentUser?.name || 'Customer',
-      paymentMethod,
-      items: cart,
-      total: cartTotal,
-      createdAt: new Date().toISOString(),
-    });
-    setCart([]);
-    setMessage({ type: 'success', text: 'Invoice generated successfully.' });
+      const order = result.data;
+      setProducts((prev) => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach((categoryKey) => {
+          updated[categoryKey] = updated[categoryKey].map((product) => {
+            const orderedItem = order.items.find((item) => item.productId === product.id);
+            return orderedItem
+              ? { ...product, quantity: product.quantity - orderedItem.quantity }
+              : product;
+          });
+        });
+        return updated;
+      });
+      setInvoice({
+        invoiceNumber: order.invoiceNumber,
+        customerName: order.customerName,
+        paymentMethod: order.paymentMethod,
+        items: order.items.map((item) => ({
+          id: item.productId,
+          name: item.name,
+          brand: item.brand,
+          price: item.price,
+          quantity: item.quantity,
+        })),
+        total: order.total,
+        createdAt: order.createdAt,
+      });
+      setCart([]);
+      setMessage({ type: 'success', text: 'Order placed and invoice generated.' });
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message || 'Unable to place order.' });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleProductSubmit = (event) => {
+  const handleProductSubmit = async (event) => {
     event.preventDefault();
 
     const payload = {
-      id: editingProductId || Date.now(),
       name: productForm.name,
-      brand: productForm.brand,
+      brand: productForm.brand.trim(),
+      category: selectedCategory,
       quantity: Number(productForm.quantity),
       price: Number(productForm.price),
       rating: Number(productForm.rating) || 4.5,
       image: productForm.image || 'https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=900&q=80',
+      description: productForm.description.trim(),
     };
+    payload.name = payload.name.trim();
+    const validationErrors = validateProductForm(productForm);
+    if (validationErrors.length) {
+      setMessage({ type: 'error', text: validationErrors.join(' ') });
+      return;
+    }
 
-    setProducts((prev) => {
-      const currentList = prev[selectedCategory] || [];
-      const updatedList = editingProductId
-        ? currentList.map((item) => (item.id === editingProductId ? payload : item))
-        : [payload, ...currentList];
+    setLoading(true);
+    try {
+      const response = editingProductId
+        ? await api.products.update(editingProductId, payload)
+        : await api.products.create(payload);
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || 'Unable to save product');
 
-      return {
-        ...prev,
-        [selectedCategory]: updatedList,
-      };
-    });
-
-    setProductForm({
-      name: '',
-      brand: '',
-      quantity: '',
-      price: '',
-      rating: '4.5',
-      image: '',
-    });
-    setEditingProductId(null);
-    setMessage({ type: 'success', text: editingProductId ? 'Product updated successfully.' : 'Product added successfully.' });
+      const savedProduct = { ...result.data, id: result.data._id || result.data.id };
+      setProducts((prev) => {
+        const currentList = prev[savedProduct.category] || [];
+        return {
+          ...prev,
+          [savedProduct.category]: editingProductId
+            ? currentList.map((item) => (item.id === savedProduct.id ? savedProduct : item))
+            : [savedProduct, ...currentList],
+        };
+      });
+      setProductForm({ name: '', brand: '', quantity: '', price: '', rating: '4.5', image: '', description: '' });
+      setEditingProductId(null);
+      setMessage({ type: 'success', text: editingProductId ? 'Product updated successfully.' : 'Product added successfully.' });
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message || 'Unable to save product.' });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleEditProduct = (product) => {
@@ -282,15 +339,24 @@ function App() {
       price: String(product.price),
       rating: String(product.rating),
       image: product.image,
+      description: product.description || '',
     });
   };
 
-  const handleDeleteProduct = (productId) => {
-    setProducts((prev) => ({
-      ...prev,
-      [selectedCategory]: (prev[selectedCategory] || []).filter((item) => item.id !== productId),
-    }));
-    setMessage({ type: 'success', text: 'Product deleted successfully.' });
+  const handleDeleteProduct = async (productId) => {
+    try {
+      const response = await api.products.remove(productId);
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || 'Unable to delete product');
+
+      setProducts((prev) => ({
+        ...prev,
+        [selectedCategory]: (prev[selectedCategory] || []).filter((item) => item.id !== productId),
+      }));
+      setMessage({ type: 'success', text: 'Product deleted successfully.' });
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message || 'Unable to delete product.' });
+    }
   };
 
   const renderAdminDashboard = () => (
@@ -327,6 +393,15 @@ function App() {
             </div>
           </header>
 
+          {message.text && (
+            <div
+              className={message.type === 'success' ? 'status success' : 'status error'}
+              role={message.type === 'success' ? 'status' : 'alert'}
+            >
+              {message.text}
+            </div>
+          )}
+
           <div className="category-switcher">
             <button type="button" className={selectedCategory === 'construction' ? 'switch-button active' : 'switch-button'} onClick={() => setSelectedCategory('construction')}>
               Construction
@@ -339,13 +414,14 @@ function App() {
           <div className="admin-form-box">
             <h3>{editingProductId ? 'Update product' : 'Add new product'}</h3>
             <form onSubmit={handleProductSubmit} className="product-form-grid">
-              <input type="text" placeholder="Product name" value={productForm.name} onChange={(e) => setProductForm((prev) => ({ ...prev, name: e.target.value }))} />
-              <input type="text" placeholder="Brand name" value={productForm.brand} onChange={(e) => setProductForm((prev) => ({ ...prev, brand: e.target.value }))} />
-              <input type="number" min="0" placeholder="Quantity" value={productForm.quantity} onChange={(e) => setProductForm((prev) => ({ ...prev, quantity: e.target.value }))} />
-              <input type="number" min="0" step="0.01" placeholder="Price" value={productForm.price} onChange={(e) => setProductForm((prev) => ({ ...prev, price: e.target.value }))} />
-              <input type="number" min="1" max="5" step="0.1" placeholder="Rating" value={productForm.rating} onChange={(e) => setProductForm((prev) => ({ ...prev, rating: e.target.value }))} />
-              <input type="text" placeholder="Image URL" value={productForm.image} onChange={(e) => setProductForm((prev) => ({ ...prev, image: e.target.value }))} />
-              <button type="submit" className="primary-button">{editingProductId ? 'Update product' : 'Add product'}</button>
+              <input type="text" aria-label="Product name" placeholder="Product name" required minLength={2} maxLength={120} value={productForm.name} onChange={(e) => setProductForm((prev) => ({ ...prev, name: e.target.value }))} />
+              <input type="text" aria-label="Brand name" placeholder="Brand name" required minLength={2} maxLength={80} value={productForm.brand} onChange={(e) => setProductForm((prev) => ({ ...prev, brand: e.target.value }))} />
+              <input type="number" aria-label="Quantity" min="0" max="1000000" step="1" placeholder="Quantity" required value={productForm.quantity} onChange={(e) => setProductForm((prev) => ({ ...prev, quantity: e.target.value }))} />
+              <input type="number" aria-label="Price" min="0" max="1000000000" step="0.01" placeholder="Price" required value={productForm.price} onChange={(e) => setProductForm((prev) => ({ ...prev, price: e.target.value }))} />
+              <input type="number" aria-label="Rating" min="1" max="5" step="0.1" placeholder="Rating" value={productForm.rating} onChange={(e) => setProductForm((prev) => ({ ...prev, rating: e.target.value }))} />
+              <input type="text" aria-label="Image URL" placeholder="Image URL" maxLength={2048} value={productForm.image} onChange={(e) => setProductForm((prev) => ({ ...prev, image: e.target.value }))} />
+              <textarea aria-label="Description" placeholder="Description" maxLength={2000} value={productForm.description} onChange={(e) => setProductForm((prev) => ({ ...prev, description: e.target.value }))} />
+              <button type="submit" className="primary-button" disabled={loading}>{editingProductId ? 'Update product' : 'Add product'}</button>
             </form>
           </div>
 
@@ -397,6 +473,12 @@ function App() {
               Logout
             </button>
           </header>
+
+          {message.text && (
+            <div className={message.type === 'success' ? 'status success' : 'status error'} role="status">
+              {message.text}
+            </div>
+          )}
 
           <div className="category-switcher">
             <button type="button" className={selectedCategory === 'construction' ? 'switch-button active' : 'switch-button'} onClick={() => setSelectedCategory('construction')}>
@@ -464,7 +546,7 @@ function App() {
               <span>Total</span>
               <strong>₹{cartTotal}</strong>
             </div>
-            <button type="button" className="primary-button" onClick={handleCheckout}>Buy now</button>
+            <button type="button" className="primary-button" onClick={handleCheckout} disabled={loading}>{loading ? 'Processing…' : 'Buy now'}</button>
           </aside>
 
           {invoice && (

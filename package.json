@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "concurrently \"npm --prefix backend run dev\" \"npm --prefix clientapp run dev\"",
     "build": "npm --prefix clientapp run build",
+    "test": "npm --prefix backend test && npm --prefix clientapp test",
+    "test:coverage": "npm --prefix backend run test:coverage && npm --prefix clientapp run test:coverage",
     "start": "npm run dev",
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down"

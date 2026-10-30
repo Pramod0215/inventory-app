@@ -3,6 +3,7 @@ import User from '../models/User.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { validateAuthInput } from '../utils/validation.js';
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -20,13 +21,9 @@ const generateToken = (user) => {
 };
 
 const registerUser = asyncHandler(async (req, res) => {
-  const { name, email, password, role } = req.body;
-
-  if (!name || !email || !password) {
-    throw new ApiError(400, 'Name, email and password are required');
-  }
-
-  const normalizedRole = role === 'admin' ? 'admin' : 'user';
+  const { value, errors } = validateAuthInput(req.body, { registration: true });
+  if (errors.length) throw new ApiError(400, 'Please correct the registration details', errors);
+  const { name, email, password } = value;
 
   const existingUser = await User.findOne({ email: email.toLowerCase() });
 
@@ -38,7 +35,7 @@ const registerUser = asyncHandler(async (req, res) => {
     name,
     email: email.toLowerCase(),
     password,
-    role: normalizedRole,
+    role: 'user',
   });
 
   const token = generateToken(user);
@@ -61,11 +58,9 @@ const registerUser = asyncHandler(async (req, res) => {
 });
 
 const loginUser = asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    throw new ApiError(400, 'Email and password are required');
-  }
+  const { value, errors } = validateAuthInput(req.body);
+  if (errors.length) throw new ApiError(400, 'Please provide valid login details', errors);
+  const { email, password } = value;
 
   const user = await User.findOne({ email: email.toLowerCase() });
 

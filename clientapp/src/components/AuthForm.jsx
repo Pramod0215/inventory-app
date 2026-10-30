@@ -11,13 +11,13 @@ export function AuthForm({
     <div className="auth-page">
       <div className="auth-shell">
         <aside className="brand-panel">
-          <div className="brand-badge">InventoryPro</div>
-          <h1>Smart stock control for modern stores.</h1>
-          <p>Track products, monitor movement, and keep warehouse operations effortless.</p>
+          <div className="brand-badge">BuildMart</div>
+          <h1>Everything you need for your next build.</h1>
+          <p>Shop trusted construction and hardware products, with live stock and straightforward checkout.</p>
           <ul className="feature-list">
-            <li>Live inventory insights</li>
-            <li>Warehouse ready dashboards</li>
-            <li>Secure user access</li>
+            <li>Browse construction and hardware essentials</li>
+            <li>Stock-aware cart and order checkout</li>
+            <li>Order invoices saved to your account</li>
           </ul>
         </aside>
 
@@ -41,7 +41,7 @@ export function AuthForm({
 
           <div className="card-header">
             <h2>{isLogin ? 'Welcome back' : 'Create your account'}</h2>
-            <p>{isLogin ? 'Access your inventory dashboard' : 'Start managing inventory smarter'}</p>
+            <p>{isLogin ? 'Sign in to shop and view your orders' : 'Create an account to start shopping'}</p>
           </div>
 
           <form onSubmit={onSubmit} className="auth-form">
@@ -55,6 +55,9 @@ export function AuthForm({
                   onChange={onChange}
                   placeholder="Enter your name"
                   required
+                  minLength={2}
+                  maxLength={80}
+                  autoComplete="name"
                 />
               </label>
             )}
@@ -68,6 +71,8 @@ export function AuthForm({
                 onChange={onChange}
                 placeholder="Enter your email"
                 required
+                maxLength={254}
+                autoComplete="email"
               />
             </label>
 
@@ -80,6 +85,9 @@ export function AuthForm({
                 onChange={onChange}
                 placeholder="Enter your password"
                 required
+                minLength={8}
+                maxLength={72}
+                autoComplete={isLogin ? 'current-password' : 'new-password'}
               />
             </label>
 
@@ -94,21 +102,20 @@ export function AuthForm({
                     onChange={onChange}
                     placeholder="Re-enter your password"
                     required
+                    minLength={8}
+                    maxLength={72}
+                    autoComplete="new-password"
                   />
                 </label>
 
-                <label>
-                  <span>Role</span>
-                  <select name="role" value={formData.role || 'user'} onChange={onChange}>
-                    <option value="user">User</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </label>
               </>
             )}
 
             {message.text && (
-              <div className={message.type === 'success' ? 'status success' : 'status error'}>
+              <div
+                className={message.type === 'success' ? 'status success' : 'status error'}
+                role={message.type === 'success' ? 'status' : 'alert'}
+              >
                 {message.text}
               </div>
             )}
