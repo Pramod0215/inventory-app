@@ -6,6 +6,8 @@ import authRoutes from './routes/auth.routes.js';
 import inventoryRoutes from './routes/inventory.routes.js';
 import productRoutes from './routes/product.routes.js';
 import orderRoutes from './routes/order.routes.js';
+import feedbackRoutes from './routes/feedback.routes.js';
+import supportRoutes from './routes/support.routes.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { getKafkaStatus } from './config/kafka.js';
 
@@ -35,6 +37,8 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/inventory', inventoryRoutes);
 app.use('/api/v1/products', productRoutes);
 app.use('/api/v1/orders', orderRoutes);
+app.use('/api/v1/feedback', feedbackRoutes);
+app.use('/api/v1/support', supportRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

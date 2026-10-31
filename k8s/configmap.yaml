@@ -10,3 +10,4 @@ data:
   KAFKA_TOPIC: "commerce.events"
   KAFKA_CLIENT_ID: "commerce-api"
   KAFKA_GROUP_ID: "commerce-event-consumers"
+  HF_MODEL: "Qwen/Qwen2.5-7B-Instruct"

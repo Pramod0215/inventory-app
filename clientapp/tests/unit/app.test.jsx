@@ -10,6 +10,8 @@ const apiMocks = vi.hoisted(() => ({
   removeProduct: vi.fn(),
   login: vi.fn(),
   signup: vi.fn(),
+  supportChat: vi.fn(),
+  submitFeedback: vi.fn(),
 }));
 
 vi.mock('../../src/services/api.js', () => ({
@@ -25,10 +27,14 @@ vi.mock('../../src/services/api.js', () => ({
       list: apiMocks.listOrders,
     },
     auth: { login: apiMocks.login, signup: apiMocks.signup },
+    support: { chat: apiMocks.supportChat },
+    feedback: { submit: apiMocks.submitFeedback },
   },
 }));
 
 import App from '../../src/app/App.jsx';
+import PreferencesControls from '../../src/components/PreferencesControls.jsx';
+import { I18nProvider, useI18n } from '../../src/i18n/I18nProvider.jsx';
 
 const product = {
   _id: '507f1f77bcf86cd799439012',
@@ -42,6 +48,7 @@ const product = {
 };
 
 beforeEach(() => {
+  localStorage.removeItem('inventory-preferences');
   localStorage.setItem('inventory-user', JSON.stringify({
     id: '507f1f77bcf86cd799439011',
     name: 'Customer',
@@ -73,6 +80,132 @@ beforeEach(() => {
 });
 
 describe('storefront checkout', () => {
+  it('cancels the catalog request when the app unmounts', () => {
+    apiMocks.listProducts.mockReturnValue(new Promise(() => {}));
+    const { unmount } = render(<App />);
+
+    const [signal] = apiMocks.listProducts.mock.calls[0];
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(signal.aborted).toBe(false);
+
+    unmount();
+    expect(signal.aborted).toBe(true);
+  });
+
+  it('updates translations without re-rendering consumers for theme-only changes', () => {
+    const renderConsumer = vi.fn();
+    function TranslationConsumer() {
+      const { t } = useI18n();
+      renderConsumer();
+      return <span>{t('Cart')}</span>;
+    }
+
+    render(
+      <I18nProvider>
+        <TranslationConsumer />
+        <PreferencesControls />
+      </I18nProvider>
+    );
+    expect(renderConsumer).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to light mode' }));
+    expect(renderConsumer).toHaveBeenCalledOnce();
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Language' }), { target: { value: 'hi' } });
+    expect(screen.getByText('कार्ट')).toBeInTheDocument();
+    expect(renderConsumer).toHaveBeenCalledTimes(2);
+  });
+
+  it('switches between English, Hindi, and Bengali and persists the day/night theme', async () => {
+    const { unmount } = render(<App />);
+
+    expect(await screen.findByText(product.name)).toBeInTheDocument();
+    const languagePicker = screen.getByRole('combobox', { name: 'Language' });
+    fireEvent.change(languagePicker, { target: { value: 'hi' } });
+    expect(screen.getByRole('heading', { name: 'निर्माण सामग्री' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'भाषा' }), { target: { value: 'bn' } });
+    expect(screen.getByRole('heading', { name: 'নির্মাণ সামগ্রী' })).toBeInTheDocument();
+    expect(document.documentElement).toHaveAttribute('lang', 'bn');
+
+    fireEvent.click(screen.getByRole('button', { name: 'লাইট মোডে যান' }));
+    expect(document.documentElement).toHaveAttribute('data-theme', 'light');
+    expect(JSON.parse(localStorage.getItem('inventory-preferences'))).toEqual({
+      language: 'bn',
+      theme: 'light',
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'ডার্ক মোডে যান' }));
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
+
+    unmount();
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'নির্মাণ সামগ্রী' })).toBeInTheDocument();
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
+  });
+
+  it('opens AI customer support and submits customer feedback', async () => {
+    apiMocks.supportChat.mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { message: 'Add the products you want to your cart, then select Buy now.' } }),
+    });
+    apiMocks.submitFeedback.mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { id: 'feedback-1' } }),
+    });
+    render(<App />);
+
+    expect(await screen.findByText(product.name)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Open customer support' }));
+    expect(screen.getByRole('region', { name: 'Customer support chat' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'How do I place an order?' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    expect(await screen.findByText('Add the products you want to your cart, then select Buy now.')).toBeInTheDocument();
+    expect(apiMocks.supportChat).toHaveBeenCalledWith([
+      { role: 'assistant', content: 'Hi! I’m the InventoryPro support assistant. What can I help you with today?' },
+      { role: 'user', content: 'How do I place an order?' },
+    ], 'en');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Feedback' }));
+    expect(screen.getByRole('heading', { name: 'Share your feedback' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('What is your feedback about?'), { target: { value: 'Orders' } });
+    fireEvent.change(screen.getByLabelText('Tell us more'), {
+      target: { value: 'The checkout process was clear and straightforward.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit feedback' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Your feedback has been received');
+    expect(apiMocks.submitFeedback).toHaveBeenCalledWith({
+      category: 'Orders',
+      rating: 5,
+      message: 'The checkout process was clear and straightforward.',
+    });
+  });
+
+  it('opens profile and settings from the user menu and logs out', async () => {
+    localStorage.setItem('inventory-token', 'customer-token');
+    render(<App />);
+
+    expect(await screen.findByText(product.name)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Open user menu' }));
+    expect(screen.getAllByRole('menuitem')).toHaveLength(3);
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Profile' }));
+    expect(screen.getByRole('heading', { name: 'Profile' })).toBeInTheDocument();
+    expect(screen.getAllByText('Customer', { selector: 'dd' })).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText(product.name)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open user menu' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Settings' }));
+    expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open user menu' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Logout' }));
+    expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
+    expect(localStorage.getItem('inventory-token')).toBeNull();
+    expect(localStorage.getItem('inventory-user')).toBeNull();
+  });
+
   it('loads the catalog, adds an item, and places an order for a saved invoice', async () => {
     apiMocks.createOrder.mockResolvedValue({
       ok: true,
@@ -469,7 +602,8 @@ describe('storefront checkout', () => {
     }));
     render(<App />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Logout' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open user menu' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Logout' }));
 
     expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
     expect(localStorage.getItem('inventory-user')).toBeNull();

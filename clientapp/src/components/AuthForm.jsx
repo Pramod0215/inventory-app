@@ -1,3 +1,6 @@
+import PreferencesControls from './PreferencesControls.jsx';
+import { useI18n } from '../i18n/I18nProvider.jsx';
+
 export function AuthForm({
   isLogin,
   formData,
@@ -7,53 +10,56 @@ export function AuthForm({
   onSubmit,
   onToggleMode,
 }) {
+  const { t } = useI18n();
+
   return (
     <div className="auth-page">
       <div className="auth-shell">
+        <div className="auth-preferences"><PreferencesControls /></div>
         <aside className="brand-panel">
-          <div className="brand-badge">BuildMart</div>
-          <h1>Everything you need for your next build.</h1>
-          <p>Shop trusted construction and hardware products, with live stock and straightforward checkout.</p>
+          <div className="brand-badge">InventoryPro</div>
+          <h1>{t('Everything you need for your next build.')}</h1>
+          <p>{t('Shop trusted construction and hardware products, with live stock and straightforward checkout.')}</p>
           <ul className="feature-list">
-            <li>Browse construction and hardware essentials</li>
-            <li>Stock-aware cart and order checkout</li>
-            <li>Order invoices saved to your account</li>
+            <li>{t('Browse construction and hardware essentials')}</li>
+            <li>{t('Stock-aware cart and order checkout')}</li>
+            <li>{t('Order invoices saved to your account')}</li>
           </ul>
         </aside>
 
         <section className="auth-card">
-          <div className="auth-toggle" role="tablist" aria-label="Authentication mode">
+          <div className="auth-toggle" role="tablist" aria-label={t('Authentication mode')}>
             <button
               type="button"
               className={isLogin ? 'toggle-button active' : 'toggle-button'}
               onClick={() => onToggleMode(true)}
             >
-              Login
+              {t('Login')}
             </button>
             <button
               type="button"
               className={!isLogin ? 'toggle-button active' : 'toggle-button'}
               onClick={() => onToggleMode(false)}
             >
-              Sign Up
+              {t('Sign Up')}
             </button>
           </div>
 
           <div className="card-header">
-            <h2>{isLogin ? 'Welcome back' : 'Create your account'}</h2>
-            <p>{isLogin ? 'Sign in to shop and view your orders' : 'Create an account to start shopping'}</p>
+            <h2>{t(isLogin ? 'Welcome back' : 'Create your account')}</h2>
+            <p>{t(isLogin ? 'Sign in to shop and view your orders' : 'Create an account to start shopping')}</p>
           </div>
 
           <form onSubmit={onSubmit} className="auth-form">
             {!isLogin && (
               <label>
-                <span>Full name</span>
+                <span>{t('Full name')}</span>
                 <input
                   type="text"
                   name="name"
                   value={formData.name}
                   onChange={onChange}
-                  placeholder="Enter your name"
+                  placeholder={t('Enter your name')}
                   required
                   minLength={2}
                   maxLength={80}
@@ -63,13 +69,13 @@ export function AuthForm({
             )}
 
             <label>
-              <span>Email address</span>
+              <span>{t('Email address')}</span>
               <input
                 type="email"
                 name="email"
                 value={formData.email}
                 onChange={onChange}
-                placeholder="Enter your email"
+                placeholder={t('Enter your email')}
                 required
                 maxLength={254}
                 autoComplete="email"
@@ -77,13 +83,13 @@ export function AuthForm({
             </label>
 
             <label>
-              <span>Password</span>
+              <span>{t('Password')}</span>
               <input
                 type="password"
                 name="password"
                 value={formData.password}
                 onChange={onChange}
-                placeholder="Enter your password"
+                placeholder={t('Enter your password')}
                 required
                 minLength={8}
                 maxLength={72}
@@ -94,13 +100,13 @@ export function AuthForm({
             {!isLogin && (
               <>
                 <label>
-                  <span>Confirm password</span>
+                  <span>{t('Confirm password')}</span>
                   <input
                     type="password"
                     name="confirmPassword"
                     value={formData.confirmPassword}
                     onChange={onChange}
-                    placeholder="Re-enter your password"
+                    placeholder={t('Re-enter your password')}
                     required
                     minLength={8}
                     maxLength={72}
@@ -116,12 +122,12 @@ export function AuthForm({
                 className={message.type === 'success' ? 'status success' : 'status error'}
                 role={message.type === 'success' ? 'status' : 'alert'}
               >
-                {message.text}
+                {t(message.text)}
               </div>
             )}
 
             <button type="submit" className="primary-button" disabled={loading}>
-              {loading ? 'Please wait...' : isLogin ? 'Login' : 'Create account'}
+              {loading ? t('Please wait...') : t(isLogin ? 'Login' : 'Create account')}
             </button>
           </form>
         </section>

@@ -282,7 +282,8 @@ describe('entrypoint and performance helper', () => {
     expect(screen.getByText('Out of stock')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Construction' }));
     fireEvent.click(screen.getByRole('button', { name: 'Hardware' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Logout' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open user menu' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Logout' }));
     expect(onOpenCategory).toHaveBeenNthCalledWith(1, 'construction');
     expect(onOpenCategory).toHaveBeenNthCalledWith(2, 'hardware');
     expect(onLogout).toHaveBeenCalledOnce();

@@ -1,9 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AuthForm } from '../components/AuthForm';
+import AppHeader from '../components/AppHeader.jsx';
+import InventoryProductCard from '../components/InventoryProductCard.jsx';
+import FeedbackPage from '../pages/FeedbackPage.jsx';
 import { DashboardPage } from '../pages/DashboardPage';
 import { inventoryData } from '../data/inventoryData';
 import { api } from '../services/api';
 import { validateAuthForm, validateProductForm } from '../utils/validateForm';
+import { I18nProvider, useI18n } from '../i18n/I18nProvider.jsx';
 import '../styles/app.css';
 
 const initialFormState = {
@@ -13,7 +17,8 @@ const initialFormState = {
   confirmPassword: '',
 };
 
-function App() {
+function AppContent() {
+  const { t, language } = useI18n();
   const [screen, setScreen] = useState(() => {
     const savedUser = localStorage.getItem('inventory-user');
     if (!savedUser) return 'login';
@@ -52,11 +57,14 @@ function App() {
     description: '',
   });
   const [editingProductId, setEditingProductId] = useState(null);
+  const [returnScreen, setReturnScreen] = useState('catalog');
 
   useEffect(() => {
+    const controller = new AbortController();
     const loadProducts = async () => {
       try {
-        const response = await api.products.list();
+        const response = await api.products.list(controller.signal);
+        if (controller.signal.aborted) return;
         const result = await response.json();
         if (!response.ok) throw new Error(result.message || 'Unable to load products');
 
@@ -71,11 +79,13 @@ function App() {
         });
         setProducts(groupedProducts);
       } catch (error) {
-        setMessage({ type: 'error', text: error.message || 'Unable to load products.' });
+        if (controller.signal.aborted) return;
+        setMessage({ type: 'error', text: error.message || t('Unable to load products.') });
       }
     };
 
     loadProducts();
+    return () => controller.abort();
   }, []);
 
   const isAdmin = currentUser?.role === 'admin';
@@ -104,7 +114,7 @@ function App() {
     setMessage({ type: '', text: '' });
   };
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     localStorage.removeItem('inventory-token');
     localStorage.removeItem('inventory-user');
     setCurrentUser(null);
@@ -114,13 +124,25 @@ function App() {
     setCart([]);
     setInvoice(null);
     setMessage({ type: '', text: '' });
-  };
+  }, []);
+
+  const openAccountPage = useCallback((page) => {
+    if (!['settings', 'profile', 'feedback'].includes(screen)) setReturnScreen(screen);
+    setScreen(page);
+  }, [screen]);
+  const handleOpenSettings = useCallback(() => openAccountPage('settings'), [openAccountPage]);
+  const handleOpenProfile = useCallback(() => openAccountPage('profile'), [openAccountPage]);
+  const handleOpenFeedback = useCallback(() => openAccountPage('feedback'), [openAccountPage]);
+  const handleOpenCategory = useCallback((category) => {
+    setSelectedCategory(category);
+    setScreen(category);
+  }, []);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     const validationErrors = validateAuthForm(formData, isLogin);
     if (validationErrors.length) {
-      setMessage({ type: 'error', text: validationErrors.join(' ') });
+      setMessage({ type: 'error', text: validationErrors.map((error) => t(error)).join(' ') });
       return;
     }
 
@@ -151,22 +173,22 @@ function App() {
       localStorage.setItem('inventory-user', JSON.stringify(user));
       setCurrentUser(user);
       setFormData(initialFormState);
-      setMessage({ type: 'success', text: isLogin ? 'Welcome back! Login successful.' : 'Account created successfully.' });
+      setMessage({ type: 'success', text: t(isLogin ? 'Welcome back! Login successful.' : 'Account created successfully.') });
       setScreen(user?.role === 'admin' ? 'dashboard' : 'catalog');
     } catch (error) {
-      setMessage({ type: 'error', text: error.message || 'Something went wrong.' });
+      setMessage({ type: 'error', text: error.message || t('Something went wrong.') });
     } finally {
       setLoading(false);
     }
   };
 
-  const addToCart = (product) => {
+  const addToCart = useCallback((product) => {
     if (isAdmin) {
-      setMessage({ type: 'error', text: 'Admin users manage stock rather than place orders.' });
+      setMessage({ type: 'error', text: t('Admin users manage stock rather than place orders.') });
       return;
     }
     if (!Number.isSafeInteger(product.quantity) || product.quantity < 1) {
-      setMessage({ type: 'error', text: 'This product is out of stock.' });
+      setMessage({ type: 'error', text: t('This product is out of stock.') });
       return;
     }
 
@@ -176,7 +198,7 @@ function App() {
       if (existing) {
         const nextQty = existing.quantity + 1;
         if (nextQty > product.quantity) {
-          setMessage({ type: 'error', text: 'Requested quantity exceeds current stock.' });
+          setMessage({ type: 'error', text: t('Requested quantity exceeds current stock.') });
           return prev;
         }
 
@@ -190,10 +212,10 @@ function App() {
       return [...prev, { id: product.id, category: selectedCategory, name: product.name, brand: product.brand, price: product.price, quantity: 1 }];
     });
 
-    setMessage({ type: 'success', text: `${product.name} added to cart.` });
-  };
+    setMessage({ type: 'success', text: `${product.name} ${t('added to cart.')}` });
+  }, [isAdmin, selectedCategory, t]);
 
-  const updateCartItem = (id, delta) => {
+  const updateCartItem = useCallback((id, delta) => {
     setCart((prev) => {
       const currentItem = prev.find((item) => item.id === id);
       if (!currentItem) return prev;
@@ -201,7 +223,7 @@ function App() {
       const nextQuantity = currentItem.quantity + delta;
       const stock = products[currentItem.category].find((product) => product.id === id)?.quantity || 0;
       if (nextQuantity > stock) {
-        setMessage({ type: 'error', text: 'Requested quantity exceeds current stock.' });
+        setMessage({ type: 'error', text: t('Requested quantity exceeds current stock.') });
         return prev;
       }
 
@@ -213,15 +235,15 @@ function App() {
         })
         .filter(Boolean);
     });
-  };
+  }, [products, t]);
 
-  const removeCartItem = (id) => {
+  const removeCartItem = useCallback((id) => {
     setCart((prev) => prev.filter((item) => item.id !== id));
-  };
+  }, []);
 
   const handleCheckout = async () => {
     if (!cart.length) {
-      setMessage({ type: 'error', text: 'Your cart is empty.' });
+      setMessage({ type: 'error', text: t('Your cart is empty.') });
       return;
     }
 
@@ -232,7 +254,7 @@ function App() {
 
     const invalid = cartStock.some((item) => item.quantity > item.available);
     if (invalid) {
-      setMessage({ type: 'error', text: 'One or more products are no longer available in stock.' });
+      setMessage({ type: 'error', text: t('One or more products are no longer available in stock.') });
       return;
     }
 
@@ -246,13 +268,16 @@ function App() {
       if (!response.ok) throw new Error(result.message || 'Unable to place order');
 
       const order = result.data;
+      const orderedQuantityByProduct = new Map(
+        order.items.map((item) => [item.productId, item.quantity])
+      );
       setProducts((prev) => {
         const updated = { ...prev };
         Object.keys(updated).forEach((categoryKey) => {
           updated[categoryKey] = updated[categoryKey].map((product) => {
-            const orderedItem = order.items.find((item) => item.productId === product.id);
-            return orderedItem
-              ? { ...product, quantity: product.quantity - orderedItem.quantity }
+            const orderedQuantity = orderedQuantityByProduct.get(product.id);
+            return orderedQuantity
+              ? { ...product, quantity: product.quantity - orderedQuantity }
               : product;
           });
         });
@@ -273,9 +298,9 @@ function App() {
         createdAt: order.createdAt,
       });
       setCart([]);
-      setMessage({ type: 'success', text: 'Order placed and invoice generated.' });
+      setMessage({ type: 'success', text: t('Order placed and invoice generated.') });
     } catch (error) {
-      setMessage({ type: 'error', text: error.message || 'Unable to place order.' });
+      setMessage({ type: 'error', text: error.message || t('Unable to place order.') });
     } finally {
       setLoading(false);
     }
@@ -297,7 +322,7 @@ function App() {
     payload.name = payload.name.trim();
     const validationErrors = validateProductForm(productForm);
     if (validationErrors.length) {
-      setMessage({ type: 'error', text: validationErrors.join(' ') });
+      setMessage({ type: 'error', text: validationErrors.map((error) => t(error)).join(' ') });
       return;
     }
 
@@ -321,15 +346,15 @@ function App() {
       });
       setProductForm({ name: '', brand: '', quantity: '', price: '', rating: '4.5', image: '', description: '' });
       setEditingProductId(null);
-      setMessage({ type: 'success', text: editingProductId ? 'Product updated successfully.' : 'Product added successfully.' });
+      setMessage({ type: 'success', text: t(editingProductId ? 'Product updated successfully.' : 'Product added successfully.') });
     } catch (error) {
-      setMessage({ type: 'error', text: error.message || 'Unable to save product.' });
+      setMessage({ type: 'error', text: error.message || t('Unable to save product.') });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleEditProduct = (product) => {
+  const handleEditProduct = useCallback((product) => {
     setEditingProductId(product.id);
     setSelectedCategory(product.category || selectedCategory);
     setProductForm({
@@ -341,9 +366,9 @@ function App() {
       image: product.image,
       description: product.description || '',
     });
-  };
+  }, [selectedCategory]);
 
-  const handleDeleteProduct = async (productId) => {
+  const handleDeleteProduct = useCallback(async (productId) => {
     try {
       const response = await api.products.remove(productId);
       const result = await response.json();
@@ -353,21 +378,79 @@ function App() {
         ...prev,
         [selectedCategory]: (prev[selectedCategory] || []).filter((item) => item.id !== productId),
       }));
-      setMessage({ type: 'success', text: 'Product deleted successfully.' });
+      setMessage({ type: 'success', text: t('Product deleted successfully.') });
     } catch (error) {
-      setMessage({ type: 'error', text: error.message || 'Unable to delete product.' });
+      setMessage({ type: 'error', text: error.message || t('Unable to delete product.') });
     }
-  };
+  }, [selectedCategory, t]);
 
   const renderAdminDashboard = () => (
     <DashboardPage
       userName={currentUser?.name || 'Admin'}
       onLogout={handleLogout}
-      onOpenCategory={(category) => {
-        setSelectedCategory(category);
-        setScreen(category);
-      }}
+      onSettings={handleOpenSettings}
+      onProfile={handleOpenProfile}
+      onFeedback={handleOpenFeedback}
+      onOpenCategory={handleOpenCategory}
       stockData={stockRows}
+    />
+  );
+
+  const renderAccountPage = () => {
+    const isProfile = screen === 'profile';
+    const accountDetails = [
+      [t('Name'), currentUser?.name || t('Not provided')],
+      [t('Email'), currentUser?.email || t('Not provided')],
+      [t('Account type'), t(currentUser?.role === 'admin' ? 'Administrator' : 'Customer')],
+    ];
+
+    return (
+      <div className="account-page">
+        <div className="page-shell">
+          <AppHeader
+            userName={currentUser?.name || 'User'}
+            onSettings={handleOpenSettings}
+            onProfile={handleOpenProfile}
+            onLogout={handleLogout}
+            onFeedback={handleOpenFeedback}
+          />
+          <header className="page-header">
+            <div>
+              <p className="eyebrow">{t('Account')}</p>
+              <h1>{t(isProfile ? 'Profile' : 'Settings')}</h1>
+            </div>
+            <button type="button" className="secondary-button" onClick={() => setScreen(returnScreen)}>
+              {t('Back')}
+            </button>
+          </header>
+          <section className="account-panel">
+            <h2>{t(isProfile ? 'Your profile' : 'Account settings')}</h2>
+            {isProfile ? (
+              <dl className="account-details">
+                {accountDetails.map(([label, value]) => (
+                  <div key={label}>
+                    <dt>{label}</dt>
+                    <dd>{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : (
+              <p>{t('Account preferences are managed by your inventory administrator.')}</p>
+            )}
+          </section>
+        </div>
+      </div>
+    );
+  };
+
+  const renderFeedbackPage = () => (
+    <FeedbackPage
+      userName={currentUser?.name || 'User'}
+      onSettings={handleOpenSettings}
+      onProfile={handleOpenProfile}
+      onLogout={handleLogout}
+      onFeedback={handleOpenFeedback}
+      onBack={() => setScreen(returnScreen)}
     />
   );
 
@@ -378,17 +461,21 @@ function App() {
     return (
       <div className="section-page">
         <div className="page-shell section-shell">
+          <AppHeader
+            userName={currentUser?.name || 'Admin'}
+            onSettings={handleOpenSettings}
+            onProfile={handleOpenProfile}
+            onLogout={handleLogout}
+            onFeedback={handleOpenFeedback}
+          />
           <header className="page-header">
             <div>
-              <p className="eyebrow">Management</p>
-              <h1>{title}</h1>
+              <p className="eyebrow">{t('Management')}</p>
+              <h1>{t(title)}</h1>
             </div>
             <div className="page-actions">
               <button type="button" className="secondary-button" onClick={() => setScreen('dashboard')}>
-                Dashboard
-              </button>
-              <button type="button" className="ghost-button" onClick={handleLogout}>
-                Logout
+                {t('Dashboard')}
               </button>
             </div>
           </header>
@@ -398,59 +485,43 @@ function App() {
               className={message.type === 'success' ? 'status success' : 'status error'}
               role={message.type === 'success' ? 'status' : 'alert'}
             >
-              {message.text}
+              {t(message.text)}
             </div>
           )}
 
           <div className="category-switcher">
             <button type="button" className={selectedCategory === 'construction' ? 'switch-button active' : 'switch-button'} onClick={() => setSelectedCategory('construction')}>
-              Construction
+              {t('Construction')}
             </button>
             <button type="button" className={selectedCategory === 'hardware' ? 'switch-button active' : 'switch-button'} onClick={() => setSelectedCategory('hardware')}>
-              Hardware
+              {t('Hardware')}
             </button>
           </div>
 
           <div className="admin-form-box">
-            <h3>{editingProductId ? 'Update product' : 'Add new product'}</h3>
+            <h3>{t(editingProductId ? 'Update product' : 'Add new product')}</h3>
             <form onSubmit={handleProductSubmit} className="product-form-grid">
-              <input type="text" aria-label="Product name" placeholder="Product name" required minLength={2} maxLength={120} value={productForm.name} onChange={(e) => setProductForm((prev) => ({ ...prev, name: e.target.value }))} />
-              <input type="text" aria-label="Brand name" placeholder="Brand name" required minLength={2} maxLength={80} value={productForm.brand} onChange={(e) => setProductForm((prev) => ({ ...prev, brand: e.target.value }))} />
-              <input type="number" aria-label="Quantity" min="0" max="1000000" step="1" placeholder="Quantity" required value={productForm.quantity} onChange={(e) => setProductForm((prev) => ({ ...prev, quantity: e.target.value }))} />
-              <input type="number" aria-label="Price" min="0" max="1000000000" step="0.01" placeholder="Price" required value={productForm.price} onChange={(e) => setProductForm((prev) => ({ ...prev, price: e.target.value }))} />
-              <input type="number" aria-label="Rating" min="1" max="5" step="0.1" placeholder="Rating" value={productForm.rating} onChange={(e) => setProductForm((prev) => ({ ...prev, rating: e.target.value }))} />
-              <input type="text" aria-label="Image URL" placeholder="Image URL" maxLength={2048} value={productForm.image} onChange={(e) => setProductForm((prev) => ({ ...prev, image: e.target.value }))} />
-              <textarea aria-label="Description" placeholder="Description" maxLength={2000} value={productForm.description} onChange={(e) => setProductForm((prev) => ({ ...prev, description: e.target.value }))} />
-              <button type="submit" className="primary-button" disabled={loading}>{editingProductId ? 'Update product' : 'Add product'}</button>
+              <input type="text" aria-label={t('Product name')} placeholder={t('Product name')} required minLength={2} maxLength={120} value={productForm.name} onChange={(e) => setProductForm((prev) => ({ ...prev, name: e.target.value }))} />
+              <input type="text" aria-label={t('Brand name')} placeholder={t('Brand name')} required minLength={2} maxLength={80} value={productForm.brand} onChange={(e) => setProductForm((prev) => ({ ...prev, brand: e.target.value }))} />
+              <input type="number" aria-label={t('Quantity')} min="0" max="1000000" step="1" placeholder={t('Quantity')} required value={productForm.quantity} onChange={(e) => setProductForm((prev) => ({ ...prev, quantity: e.target.value }))} />
+              <input type="number" aria-label={t('Price')} min="0" max="1000000000" step="0.01" placeholder={t('Price')} required value={productForm.price} onChange={(e) => setProductForm((prev) => ({ ...prev, price: e.target.value }))} />
+              <input type="number" aria-label={t('Rating')} min="1" max="5" step="0.1" placeholder={t('Rating')} value={productForm.rating} onChange={(e) => setProductForm((prev) => ({ ...prev, rating: e.target.value }))} />
+              <input type="text" aria-label={t('Image URL')} placeholder={t('Image URL')} maxLength={2048} value={productForm.image} onChange={(e) => setProductForm((prev) => ({ ...prev, image: e.target.value }))} />
+              <textarea aria-label={t('Description')} placeholder={t('Description')} maxLength={2000} value={productForm.description} onChange={(e) => setProductForm((prev) => ({ ...prev, description: e.target.value }))} />
+              <button type="submit" className="primary-button" disabled={loading}>{t(editingProductId ? 'Update product' : 'Add product')}</button>
             </form>
           </div>
 
           <div className="product-grid">
             {items.map((product) => (
-              <div key={product.id} className="product-card">
-                <img src={product.image} alt={product.name} className="product-image" />
-                <div className="product-body">
-                  <div className="product-header-row">
-                    <div>
-                      <h3>{product.name}</h3>
-                      <p className="brand-name">{product.brand}</p>
-                    </div>
-                    <div className="rating-box">★ {product.rating}</div>
-                  </div>
-                  <div className="product-meta-line">
-                    <span>Qty: {product.quantity}</span>
-                    <strong>₹{product.price}</strong>
-                  </div>
-                  <div className="admin-actions">
-                    <button type="button" className="secondary-button small" onClick={() => handleEditProduct({ ...product, category: selectedCategory })}>
-                      Edit
-                    </button>
-                    <button type="button" className="ghost-button small" onClick={() => handleDeleteProduct(product.id)}>
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <InventoryProductCard
+                key={product.id}
+                product={product}
+                t={t}
+                isAdmin
+                onEdit={handleEditProduct}
+                onDelete={handleDeleteProduct}
+              />
             ))}
           </div>
         </div>
@@ -464,59 +535,45 @@ function App() {
     return (
       <div className="catalog-page">
         <div className="page-shell">
+          <AppHeader
+            userName={currentUser?.name || 'User'}
+            onSettings={handleOpenSettings}
+            onProfile={handleOpenProfile}
+            onLogout={handleLogout}
+            onFeedback={handleOpenFeedback}
+          />
           <header className="page-header">
             <div>
-              <p className="eyebrow">Product Catalog</p>
-              <h1>{selectedCategory === 'construction' ? 'Construction' : 'Hardware'}</h1>
+              <p className="eyebrow">{t('Product Catalog')}</p>
+              <h1>{t(selectedCategory === 'construction' ? 'Construction' : 'Hardware')}</h1>
             </div>
-            <button type="button" className="ghost-button" onClick={handleLogout}>
-              Logout
-            </button>
           </header>
 
           {message.text && (
             <div className={message.type === 'success' ? 'status success' : 'status error'} role="status">
-              {message.text}
+              {t(message.text)}
             </div>
           )}
 
           <div className="category-switcher">
             <button type="button" className={selectedCategory === 'construction' ? 'switch-button active' : 'switch-button'} onClick={() => setSelectedCategory('construction')}>
-              Construction
+              {t('Construction')}
             </button>
             <button type="button" className={selectedCategory === 'hardware' ? 'switch-button active' : 'switch-button'} onClick={() => setSelectedCategory('hardware')}>
-              Hardware
+              {t('Hardware')}
             </button>
           </div>
 
           <div className="catalog-grid">
             {items.map((product) => (
-              <div key={product.id} className="product-card">
-                <img src={product.image} alt={product.name} className="product-image" />
-                <div className="product-body">
-                  <div className="product-header-row">
-                    <div>
-                      <h3>{product.name}</h3>
-                      <p className="brand-name">{product.brand}</p>
-                    </div>
-                    <div className="rating-box">★ {product.rating}</div>
-                  </div>
-                  <div className="product-meta-line">
-                    <span>Qty: {product.quantity}</span>
-                    <strong>₹{product.price}</strong>
-                  </div>
-                  <button type="button" className="primary-button small" onClick={() => addToCart(product)}>
-                    Add to cart
-                  </button>
-                </div>
-              </div>
+              <InventoryProductCard key={product.id} product={product} t={t} onAdd={addToCart} />
             ))}
           </div>
 
           <aside className="cart-panel">
-            <h3>Cart</h3>
+            <h3>{t('Cart')}</h3>
             {cart.length === 0 ? (
-              <p className="empty-message">No items added yet.</p>
+              <p className="empty-message">{t('No items added yet.')}</p>
             ) : (
               <div className="cart-items">
                 {cart.map((item) => (
@@ -530,48 +587,48 @@ function App() {
                       <span>{item.quantity}</span>
                       <button type="button" onClick={() => updateCartItem(item.id, 1)}>+</button>
                     </div>
-                    <button type="button" className="remove-button" onClick={() => removeCartItem(item.id)}>Remove</button>
+                    <button type="button" className="remove-button" onClick={() => removeCartItem(item.id)}>{t('Remove')}</button>
                   </div>
                 ))}
               </div>
             )}
 
             <div className="payment-box">
-              <h4>Payment method</h4>
+              <h4>{t('Payment method')}</h4>
               <label><input type="radio" name="paymentMethod" checked={paymentMethod === 'UPI'} onChange={() => setPaymentMethod('UPI')} /> UPI</label>
               <label><input type="radio" name="paymentMethod" checked={paymentMethod === 'Cash'} onChange={() => setPaymentMethod('Cash')} /> Cash</label>
             </div>
 
             <div className="cart-summary-row">
-              <span>Total</span>
+              <span>{t('Total')}</span>
               <strong>₹{cartTotal}</strong>
             </div>
-            <button type="button" className="primary-button" onClick={handleCheckout} disabled={loading}>{loading ? 'Processing…' : 'Buy now'}</button>
+            <button type="button" className="primary-button" onClick={handleCheckout} disabled={loading}>{loading ? t('Processing…') : t('Buy now')}</button>
           </aside>
 
           {invoice && (
             <div className="invoice-box">
               <div className="invoice-header">
                 <div>
-                  <p className="eyebrow">Invoice</p>
+                  <p className="eyebrow">{t('Invoice')}</p>
                   <h3>{invoice.invoiceNumber}</h3>
                 </div>
                 <button type="button" className="secondary-button" onClick={() => window.print()}>
-                  Print invoice
+                  {t('Print invoice')}
                 </button>
               </div>
               <div className="invoice-details">
-                <p>Customer: {invoice.customerName}</p>
-                <p>Payment: {invoice.paymentMethod}</p>
-                <p>Date: {new Date(invoice.createdAt).toLocaleString()}</p>
+                <p>{t('Customer:')} {invoice.customerName}</p>
+                <p>{t('Payment:')} {invoice.paymentMethod}</p>
+                <p>{t('Date:')} {new Date(invoice.createdAt).toLocaleString(language === 'hi' ? 'hi-IN' : language === 'bn' ? 'bn-BD' : 'en-IN')}</p>
               </div>
               <table>
                 <thead>
                   <tr>
-                    <th>Product</th>
-                    <th>Qty</th>
-                    <th>Price</th>
-                    <th>Amount</th>
+                    <th>{t('Product')}</th>
+                    <th>{t('Qty')}</th>
+                    <th>{t('Price')}</th>
+                    <th>{t('Amount')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -586,7 +643,7 @@ function App() {
                 </tbody>
               </table>
               <div className="invoice-total">
-                <span>Total Amount</span>
+                <span>{t('Total Amount')}</span>
                 <strong>₹{invoice.total}</strong>
               </div>
             </div>
@@ -613,6 +670,8 @@ function App() {
   if (isAdmin) {
     if (screen === 'dashboard') return renderAdminDashboard();
     if (screen === 'construction' || screen === 'hardware') return renderCategoryManagementPage();
+    if (screen === 'feedback') return renderFeedbackPage();
+    if (screen === 'settings' || screen === 'profile') return renderAccountPage();
     return renderAdminDashboard();
   }
 
@@ -620,7 +679,16 @@ function App() {
     return renderUserCatalog();
   }
 
+  if (screen === 'feedback') return renderFeedbackPage();
+  if (screen === 'settings' || screen === 'profile') return renderAccountPage();
+
   return renderUserCatalog();
 }
 
-export default App;
+export default function App() {
+  return (
+    <I18nProvider>
+      <AppContent />
+    </I18nProvider>
+  );
+}

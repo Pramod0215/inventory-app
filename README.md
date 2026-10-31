@@ -8,6 +8,9 @@ A full-stack storefront and inventory management app for construction and hardwa
 - Stock-aware cart and checkout with UPI or cash payment selection.
 - Customer registration/login, JWT-protected orders, and printable order invoices.
 - Admin dashboard and product create/update/soft-delete workflows.
+- Customer feedback submissions saved to MongoDB.
+- Authenticated AI customer support chat powered by Hugging Face Inference Providers.
+- English, Hindi, and Bengali interface translations with persistent light and dark themes.
 - Validated API requests and database model constraints.
 - Optional Kafka events for product changes and placed orders.
 - Docker Compose, Kubernetes/Kustomize manifests, and GitHub Actions CI.
@@ -42,6 +45,7 @@ Copy-Item backend/.env.example backend/.env
 ```
 
 Set `MONGODB_URI` and a unique `JWT_SECRET` in `backend/.env`. Kafka is disabled by default for local development (`KAFKA_ENABLED=false`). To use Kafka locally, set it to `true` and configure `KAFKA_BROKERS`.
+To enable AI support, set `HF_TOKEN` to a Hugging Face token with Inference Providers access. `HF_MODEL` optionally selects the chat model; it defaults to `Qwen/Qwen2.5-7B-Instruct`. The token stays on the backend and is never sent to the browser. Without a token, the support API returns a clear configuration error; the feedback form remains available.
 
 With MongoDB running, seed the catalog and start the frontend/API:
 
@@ -68,7 +72,7 @@ Authentication requires a valid email and an 8-character minimum password (up to
 
 ## Docker Compose
 
-Set `JWT_SECRET` in the shell or a root `.env` file before using Compose; the Compose fallback is for development only.
+Set `JWT_SECRET` in the shell or a root `.env` file before using Compose; the Compose fallback is for development only. Set `HF_TOKEN` in the shell or root `.env` to enable the AI chat in Compose.
 
 ```powershell
 npm run docker:up
@@ -104,6 +108,7 @@ kubectl apply -f k8s/namespace.yaml
 kubectl create secret generic inventory-app-secrets -n inventory-app `
   --from-literal=MONGODB_URI=mongodb://mongodb:27017/inventory_app `
   --from-literal=JWT_SECRET=REPLACE_WITH_A_LONG_RANDOM_SECRET `
+  --from-literal=HF_TOKEN=REPLACE_WITH_A_HUGGING_FACE_TOKEN `
   --from-literal=ADMIN_NAME="Store Admin" `
   --from-literal=ADMIN_EMAIL=admin@example.com `
   --from-literal=ADMIN_PASSWORD=REPLACE_WITH_A_STRONG_PASSWORD
@@ -129,9 +134,11 @@ Base path: `/api/v1`
 | `DELETE` | `/products/:id` | Soft-delete a product | Admin |
 | `POST` | `/orders` | Place an order | Signed-in user |
 | `GET` | `/orders` | List customer orders (admins can list all) | Signed-in user |
+| `POST` | `/feedback` | Submit customer feedback | Signed-in user |
+| `POST` | `/support/chat` | Send a message to AI customer support | Signed-in user |
 | `GET` | `/api/health` | API and Kafka status | Public |
 
-The separate `/api/v1/inventory` endpoints provide inventory item CRUD operations. Product/order changes publish events to the configured Kafka topic (`commerce.events` by default).
+The separate `/api/v1/inventory` endpoints provide inventory item CRUD operations. Product/order changes publish events to the configured Kafka topic (`commerce.events` by default). For Kubernetes, add `HF_TOKEN` to the `inventory-app-secrets` Secret to enable chat.
 
 ## Project layout
 

@@ -15,7 +15,9 @@ export const api = {
     }),
   },
   products: {
-    list: () => fetch(`${API_URL}/products`),
+    list: (signal) => (signal
+      ? fetch(`${API_URL}/products`, { signal })
+      : fetch(`${API_URL}/products`)),
     create: (payload) => fetch(`${API_URL}/products`, {
       method: 'POST',
       headers: {
@@ -52,6 +54,26 @@ export const api = {
       headers: {
         Authorization: `Bearer ${localStorage.getItem('inventory-token') || ''}`,
       },
+    }),
+  },
+  support: {
+    chat: (messages, language = 'en') => fetch(`${API_URL}/support/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('inventory-token') || ''}`,
+      },
+      body: JSON.stringify({ messages, language }),
+    }),
+  },
+  feedback: {
+    submit: (payload) => fetch(`${API_URL}/feedback`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('inventory-token') || ''}`,
+      },
+      body: JSON.stringify(payload),
     }),
   },
 };

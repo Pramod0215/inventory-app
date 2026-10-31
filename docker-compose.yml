@@ -64,6 +64,8 @@ services:
       PORT: 5000
       MONGODB_URI: mongodb://mongo:27017/inventory_app
       JWT_SECRET: ${JWT_SECRET:-development-only-change-me}
+      HF_TOKEN: ${HF_TOKEN:-}
+      HF_MODEL: ${HF_MODEL:-Qwen/Qwen2.5-7B-Instruct}
       KAFKA_ENABLED: 'true'
       KAFKA_BROKERS: kafka:9092
       KAFKA_TOPIC: commerce.events

@@ -70,6 +70,16 @@ describe('API client', () => {
     expect(fetch.mock.calls.at(-1)[1].headers.Authorization).toBe('Bearer test-token');
   });
 
+  it('forwards an abort signal to product list requests', async () => {
+    const controller = new AbortController();
+
+    await api.products.list(controller.signal);
+
+    expect(fetch).toHaveBeenLastCalledWith(`${api.baseUrl}/products`, {
+      signal: controller.signal,
+    });
+  });
+
   it('sends an empty bearer token when protected requests have no saved session', async () => {
     await api.orders.list();
 
